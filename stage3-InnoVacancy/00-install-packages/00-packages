@@ -1,0 +1,4 @@
+xinit xinput xserver-xorg xserver-xorg-video-fbdev xserver-xorg-video-fbturbo x11-xserver-utils
+matchbox
+unclutter
+chromium-browser
