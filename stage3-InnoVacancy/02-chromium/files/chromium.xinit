@@ -1,0 +1,60 @@
+#!/bin/sh
+
+# DEFAULT VARIABLES
+INNOVACANCY_EXECUTE="matchbox-window-manager & unclutter -idle 0.1 &"
+CHROME_BIN="chromium-browser"
+CONFIG_DIR=/run/innovacancy-chromium/
+
+# Uncomment the next variable to generate a full log under ~/.config/chromium/chrome_debug.log
+# or to enable the remote deugger, forward port by haproxy or by tunnel
+#INNOVACANCY_DEBUG="--remote-debugging-port=9222 --enable-logging --v=100"
+
+mkdir -p $CONFIG_DIR
+chown -R $INNOVACANCY_USER:$INNOVACANCY_USER $CONFIG_DIR
+
+# Remove restore last session after crash in Chrome
+sed -i 's/"exited_cleanly":false/"exited_cleanly":true/' $CONFIG_DIR/Default/Preferences
+sed -i 's/"exit_type":"Crashed"/"exit_type":"None"/' $CONFIG_DIR/Default/Preferences
+# And another one for not minified Preferences (Chrome legacy)
+sed -i 's/"exited_cleanly": false/"exited_cleanly": true/' $CONFIG_DIR/Default/Preferences
+sed -i 's/"exit_type": "Crashed"/"exit_type": "None"/' $CONFIG_DIR/Default/Preferences
+
+# Check if $FORCE_TOUCH is set to true
+# This variable is set inside /etc/default/touchui
+if [ "$FORCE_TOUCH" = true ]
+then
+	echo "InnoVacancy: touch events enabled (forced)"
+	INNOVACANCY_ARGS="$INNOVACANCY_ARGS --touch-events=enabled"
+else
+	# Force Chrome to render with touch events
+	# Bugfix #46
+	INNOVACANCY_DEVICE=$(xinput --list --long | grep XITouchClass)
+	if [ -z "$INNOVACANCY_DEVICE" ]
+	then
+		echo "InnoVacancy: touch events automatically detected"
+	else
+		echo "InnoVacancy: touch events enabled"
+		INNOVACANCY_ARGS="$INNOVACANCY_ARGS --touch-events=enabled"
+	fi
+fi
+
+# Check if we need to disable the screensaver
+if [ "$DISABLE_SCREENSAVER" = true ]
+then
+	echo "InnoVacancy: screensaver disabled"
+	INNOVACANCY_EXTRA="xset s off & xset -dpms & xset s noblank"
+fi
+
+INNOVACANCY_DIR="/home/$INNOVACANCY_USER/$INNOVACANCY_DIR"
+CHROME_VERSION=$(dpkg -s chromium-browser | grep "Version: " | sed -e 's/Version: //g')
+CHROME_ARGS="	--no-first-run --kiosk $INNOVACANCY_ARGS $INNOVACANCY_DEBUG
+				--dns-prefetch-disable --disable-sync-preferences --disk-cache-size=1 --disk-cache-dir=/dev/null
+				--disable-java --disable-plugins --disable-extensions --disable-infobars
+				--user-agent='InnoVacancy (X11, Chrome $CHROME_VERSION) (P:$INNOVACANCY_PORT)'
+				--start-maximized --window-position=0,0 --user-data-dir=$CONFIG_DIR
+				http://localhost:$INNOVACANCY_PORT/"
+
+# Start window manager, unclutter to remove cursor and start chromium as specific user
+eval $INNOVACANCY_EXTRA &
+eval $INNOVACANCY_EXECUTE &
+su $INNOVACANCY_USER -c "$CHROME_BIN $(echo $CHROME_ARGS|tr -d '\n')"
